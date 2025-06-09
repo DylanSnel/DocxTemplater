@@ -63,7 +63,7 @@ namespace DocxTemplater
                 loop.Expand(Context.ModelLookup, rootElement);
             }
 
-            Cleanup(rootElement, removeEmptyElements: true);
+            TemplateProcessor.Cleanup(rootElement, removeEmptyElements: true);
 
             // Remove paragraphs that only contained blocks and are now empty
             RemoveEmptyParagraphsFromBlockProcessing(rootElement);
@@ -147,7 +147,7 @@ namespace DocxTemplater
             return patternMatches;
         }
 
-        private void Cleanup(OpenXmlCompositeElement element, bool removeEmptyElements)
+        private static void Cleanup(OpenXmlCompositeElement element, bool removeEmptyElements)
         {
             InsertionPoint.RemoveAll(element);
             foreach (var markedText in element.Descendants<Text>().Where(x => x.IsMarked()).ToList())
@@ -155,7 +155,6 @@ namespace DocxTemplater
                 var value = markedText.GetMarker();
                 if (removeEmptyElements && value is not PatternType.Variable)
                 {
-                    var parent = markedText.Parent;
                     markedText.RemoveWithEmptyParent();
                 }
                 else
