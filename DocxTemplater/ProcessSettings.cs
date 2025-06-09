@@ -19,6 +19,13 @@ namespace DocxTemplater
         /// </summary>
         public bool IgnoreLineBreaksAroundTags { get; set; }
 
+        /// <summary>
+        /// When enabled, paragraphs that only contained template blocks and no other content are removed from the final output.
+        /// This ensures that empty paragraphs aren't left behind when template blocks are processed and removed.
+        /// default: true
+        /// </summary>
+        public bool RemoveParagraphsContainingOnlyBlocks { get; set; } = true;
+
         public static ProcessSettings Default { get; } = new();
     }
 }

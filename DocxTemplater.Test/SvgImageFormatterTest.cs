@@ -142,7 +142,7 @@ namespace DocxTemplater.Test
             // Verify viewBox attribute is preserved in the SVG content
             using var stream = imagePart.GetStream();
             var buffer = new byte[stream.Length];
-            stream.Read(buffer, 0, (int)stream.Length);
+            stream.ReadExactly(buffer);
             var content = Encoding.UTF8.GetString(buffer);
             Assert.That(content, Does.Contain("viewBox=\"0 0 200 150\""), "SVG content should preserve the viewBox attribute");
         }

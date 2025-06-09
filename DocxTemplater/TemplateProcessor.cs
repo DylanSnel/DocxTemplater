@@ -37,6 +37,12 @@ namespace DocxTemplater
 
             RemoveLineBreaksAroundSyntaxPatterns(matches);
 
+            // Mark paragraphs containing closing tags for potential removal later
+            if (Context.ProcessSettings.RemoveParagraphsContainingOnlyBlocks)
+            {
+                TemplateProcessor.MarkParagraphsWithClosingTags(matches);
+            }
+
 #if DEBUG
             Console.WriteLine("----------- Isolate Texts --------");
             Console.WriteLine(rootElement.ToPrettyPrintXml());
@@ -58,6 +64,9 @@ namespace DocxTemplater
             }
 
             Cleanup(rootElement, removeEmptyElements: true);
+
+            // Remove paragraphs that only contained blocks and are now empty
+            RemoveEmptyParagraphsFromBlockProcessing(rootElement);
 #if DEBUG
             Console.WriteLine("----------- Completed --------");
             Console.WriteLine(rootElement.ToPrettyPrintXml());
@@ -138,7 +147,7 @@ namespace DocxTemplater
             return patternMatches;
         }
 
-        private static void Cleanup(OpenXmlCompositeElement element, bool removeEmptyElements)
+        private void Cleanup(OpenXmlCompositeElement element, bool removeEmptyElements)
         {
             InsertionPoint.RemoveAll(element);
             foreach (var markedText in element.Descendants<Text>().Where(x => x.IsMarked()).ToList())
@@ -154,6 +163,7 @@ namespace DocxTemplater
                     markedText.RemoveAttribute("mrk", null);
                 }
             }
+
 
             // make dock properties ids unique
             uint id = 1;
@@ -284,6 +294,101 @@ namespace DocxTemplater
         public void RegisterExtension(ITemplateProcessorExtension extension)
         {
             Context.RegisterExtension(extension);
+        }
+
+        private static void MarkParagraphsWithClosingTags(IReadOnlyCollection<(PatternMatch, Text)> matches)
+        {
+            const string ClosingTagAttributeName = "ClosingTagMark";
+            var paragraphsToTrack = new HashSet<Paragraph>();
+
+            // Find all paragraphs that contain closing tags like {{/}}, {{/Items}}, etc.
+            foreach (var (match, text) in matches)
+            {
+                if (match.Type is PatternType.ConditionEnd or PatternType.CollectionEnd or PatternType.IgnoreEnd)
+                {
+                    var paragraph = text.GetFirstAncestor<Paragraph>();
+                    if (paragraph != null)
+                    {
+                        // Mark the paragraph with a custom attribute for tracking, following the same pattern as IpId
+                        paragraph.SetAttribute(new OpenXmlAttribute(null, ClosingTagAttributeName, null, "true"));
+                        paragraphsToTrack.Add(paragraph);
+                    }
+                }
+            }
+        }
+
+        private static void RemoveEmptyParagraphsFromBlockProcessing(OpenXmlCompositeElement element)
+        {
+            const string ClosingTagAttributeName = "ClosingTagMark";
+
+            // Find paragraphs that were involved in block processing
+            // and are now empty (containing only properties/empty runs)
+            var emptyBlockParagraphs = element.Descendants<Paragraph>()
+                .Where(p =>
+                {
+                    // Skip paragraphs in table cells if they're the only paragraph
+                    if (p.Parent is TableCell tc && tc.Elements<Paragraph>().Count() == 1)
+                    {
+                        return false;
+                    }
+
+                    // Consider paragraphs that were part of block processing
+                    // These have IpId attributes with values like "End_CollectionStart_X" or "End_Condition_X"
+                    // OR paragraphs that have our custom ClosingTagMark attribute
+                    bool isBlockParagraph = p.GetAttributes()
+                        .Any(a => (a.LocalName == "IpId" &&
+                                  (a.Value.StartsWith("End_") || a.Value == "None")) ||
+                                  a.LocalName == ClosingTagAttributeName);
+
+                    if (!isBlockParagraph)
+                    {
+                        return false;
+                    }
+
+                    // Check if paragraph is empty
+                    var runs = p.Elements<Run>().ToList();
+                    if (!runs.Any())
+                    {
+                        // No runs - only properties
+                        return true;
+                    }
+
+                    // Check if all runs are empty
+                    foreach (var run in runs)
+                    {
+                        // Get all text elements in the run
+                        var texts = run.Elements<Text>().ToList();
+
+                        // Check for non-empty text
+                        if (texts.Any(t => !string.IsNullOrWhiteSpace(t.Text)))
+                        {
+                            // Found non-empty text
+                            return false;
+                        }
+
+                        // Also check for Drawing elements (images)
+                        if (run.Elements<Drawing>().Any())
+                        {
+                            // Found a drawing/image
+                            return false;
+                        }
+                    }
+
+                    // All runs are empty or have no content
+                    return true;
+                })
+                .ToList();
+
+            foreach (var paragraph in emptyBlockParagraphs)
+            {
+                paragraph.Remove();
+            }
+
+            // Clean up any remaining custom attributes
+            foreach (var element2 in element.Descendants())
+            {
+                element2.RemoveAttribute(ClosingTagAttributeName, null);
+            }
         }
     }
 }

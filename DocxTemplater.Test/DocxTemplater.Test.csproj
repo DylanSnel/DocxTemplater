@@ -120,5 +120,8 @@
     <None Update="Resources\TimeTracking.docx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <Content Include="Resources\RemoveParagraphsContainingOnlyBlocks.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>
